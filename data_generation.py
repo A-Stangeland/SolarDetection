@@ -166,17 +166,19 @@ class DatasetGenerator:
                         if shuffle:
                             self.shuffle_dataset()
                         return None
+        print("Dataset generation complete.")
         if shuffle:
             self.shuffle_dataset()
     
     def shuffle_dataset(self):
+        print("Shuffling dataset...")
         os.rename(self.image_path, os.path.join(self.dataset_path, "images_old"))
         os.rename(self.mask_path, os.path.join(self.dataset_path, "masks_old"))
         os.makedirs(self.image_path)
         os.makedirs(self.mask_path)
 
         sample_index_shuffled = np.random.permutation(self.sample_counter)
-        for old_index, new_index in enumerate(sample_index_shuffled):
+        for old_index, new_index in tqmd(enumerate(sample_index_shuffled)):
             old_image_path = os.path.join(self.dataset_path, "images_old", f"i_{old_index}.png")
             new_image_path = os.path.join(self.image_path, f"i_{new_index}.png")
             os.rename(old_image_path, new_image_path)
@@ -187,7 +189,30 @@ class DatasetGenerator:
         
         os.rmdir(os.path.join(self.dataset_path, "images_old"))
         os.rmdir(os.path.join(self.dataset_path, "masks_old"))
+        print("Dataset shuffled.")
     
+    def split_dataset(self, test_split=.25):
+        train_path = os.path.join(self.dataset_dir, "train")
+        test_path = os.path.join(self.dataset_dir, "test")
+        if not os.path.exists(train_path):
+            os.makedirs(os.path.join(train_path, "images"))
+            os.makedirs(os.path.join(train_path, "masks"))
+        if not os.path.exists(test_path):
+            os.makedirs(os.path.join(test_path, "images"))
+            os.makedirs(os.path.join(test_path, "masks"))
+        
+        sample_index_shuffled = np.random.permutation(self.sample_counter)
+        self.num_test_samples = int(test_split * self.sample_counter)
+        self.num_train_samples = self.sample_counter - self.num_test_samples
+        for new_index in range(self.num_train_samples):
+            old_index = sample_index_shuffled[new_index]
+            os.rename(os.path.join(self.image_path, f"i_{old_index}.png"), os.path.join(train_path, "images", f"i_{new_index}.png"))
+            os.rename(os.path.join(self.mask_path, f"m_{old_index}.png"), os.path.join(train_path, "masks", f"m_{new_index}.png"))
+        for new_index in range(self.num_train_samples, self.sample_counter):
+            old_index = sample_index_shuffled[new_index]
+            os.rename(os.path.join(self.image_path, f"i_{old_index}.png"), os.path.join(test_path, "images", f"i_{new_index}.png"))
+            os.rename(os.path.join(self.mask_path, f"m_{old_index}.png"), os.path.join(test_path, "masks", f"m_{new_index}.png"))
+
     @staticmethod
     def import_image(image_file):
         with rasterio.open(image_file) as f:
@@ -305,4 +330,4 @@ if __name__=='__main__':
 
     dataset_gen = DatasetGenerator(dataset_path)
     dataset_gen.clear_data()
-    dataset_gen.generate_samples(polygon_path, image_path, num_samples=1000, shuffle=True)
+    dataset_gen.generate_samples(polygon_path, image_path, shuffle=True)
