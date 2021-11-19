@@ -1,4 +1,5 @@
 # from numpy.lib.type_check import imag
+from numpy.random.mtrand import shuffle
 import rasterio
 import json
 import numpy as np
@@ -6,7 +7,9 @@ import tensorflow as tf
 from tensorflow.keras.utils import Sequence
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from PIL import Image, ImageDraw
+from tqdm import tqdm
 import os
+import shutil
 import glob
 import utm
 
@@ -16,8 +19,16 @@ class DatasetGenerator:
     def __init__(self, dataset_path, sample_size=128) -> None:
         if not os.path.exists(dataset_path):
             os.makedirs(dataset_path)
+        image_path = os.path.join(dataset_path, "images")
+        mask_path = os.path.join(dataset_path, "masks")
+        if not os.path.exists(image_path):
+            os.makedirs(image_path)
+        if not os.path.exists(mask_path):
+            os.makedirs(mask_path)
+
         self.dataset_path = dataset_path
-        
+        self.image_path = image_path
+        self.mask_path = mask_path
         self.sample_counter = 0
         self.sample_size= sample_size
     
@@ -27,6 +38,10 @@ class DatasetGenerator:
             files = glob.glob(os.path.join(self.dataset_path, directory, "*"))
             for f in files:
                 os.remove(f)
+        if os.path.exists(os.path.join(self.dataset_path, "images_old")):
+            shutil.rmtree(os.path.join(self.dataset_path, "images_old"))
+        if os.path.exists(os.path.join(self.dataset_path, "masks_old")):
+            shutil.rmtree(os.path.join(self.dataset_path, "masks_old"))
         self.sample_counter = 0
     
     def read_polygon_file(self, polygon_file):
@@ -123,14 +138,18 @@ class DatasetGenerator:
 
         return sample_xmin, sample_xmax, sample_ymin, sample_ymax
 
-    def generate_samples(self, polygon_file, image_dir, shuffle=True):
+    def generate_samples(self, polygon_file, image_dir, shuffle=True, num_samples=None, clear_data=True):
+        if clear_data:
+            self.clear_data()
+
+        print("Generating dataset...")
         self.polygon_file = polygon_file
         self.image_dir = image_dir
         polygon_data = self.read_polygon_file(polygon_file)
         
         # Looping through image files first so that each image file will be opened and closed only once
         image_metadata = self.get_image_metadata(image_dir)
-        for image_path, image_name in image_metadata:
+        for image_path, image_name in tqdm(image_metadata):
             image = self.import_image(image_path)
             polygons, centroids = self.get_polygons_in_image(image_name)
             mask = self.get_mask(image, polygons)
@@ -141,19 +160,33 @@ class DatasetGenerator:
                 Image.fromarray(image_sample).save(os.path.join(self.dataset_path, "images", f"i_{self.sample_counter}.png"))
                 Image.fromarray(mask_sample).save(os.path.join(self.dataset_path, "masks", f"m_{self.sample_counter}.png"))
                 self.sample_counter += 1
+
+                if num_samples is not None:
+                    if self.sample_counter == num_samples:
+                        if shuffle:
+                            self.shuffle_dataset()
+                        return None
         if shuffle:
             self.shuffle_dataset()
     
     def shuffle_dataset(self):
+        os.rename(self.image_path, os.path.join(self.dataset_path, "images_old"))
+        os.rename(self.mask_path, os.path.join(self.dataset_path, "masks_old"))
+        os.makedirs(self.image_path)
+        os.makedirs(self.mask_path)
+
         sample_index_shuffled = np.random.permutation(self.sample_counter)
         for old_index, new_index in enumerate(sample_index_shuffled):
-            old_image_path = os.path.join(self.dataset_path, "images", f"i_{old_index}.png")
-            new_image_path = os.path.join(self.dataset_path, "images", f"i_{new_index}.png")
+            old_image_path = os.path.join(self.dataset_path, "images_old", f"i_{old_index}.png")
+            new_image_path = os.path.join(self.image_path, f"i_{new_index}.png")
             os.rename(old_image_path, new_image_path)
 
-            old_mask_path = os.path.join(self.dataset_path, "masks", f"i_{old_index}.png")
-            new_mask_path = os.path.join(self.dataset_path, "masks", f"i_{new_index}.png")
+            old_mask_path = os.path.join(self.dataset_path, "masks_old", f"m_{old_index}.png")
+            new_mask_path = os.path.join(self.mask_path, f"m_{new_index}.png")
             os.rename(old_mask_path, new_mask_path)
+        
+        os.rmdir(os.path.join(self.dataset_path, "images_old"))
+        os.rmdir(os.path.join(self.dataset_path, "masks_old"))
     
     @staticmethod
     def import_image(image_file):
@@ -266,11 +299,10 @@ class SegmentationDataGenerator(Sequence):
 
 
 if __name__=='__main__':
-    polygon_file = r"Projet_INSA_France\DeepSolar\DATA_DeepSolar\metadata\SolarArrayPolygons.geojson"
-    image_dir = r"Projet_INSA_France\DeepSolar\DATA_DeepSolar"
-    dataset_dir = r"test_dataset"
+    polygon_path = r"..\Projet_INSA_France\DeepSolar\DATA_DeepSolar\metadata\SolarArrayPolygons.geojson"
+    image_path = r"..\Projet_INSA_France\DeepSolar\DATA_DeepSolar"
+    dataset_path = r"test_dataset"
 
-    dataset_gen = DatasetGenerator(dataset_dir)
+    dataset_gen = DatasetGenerator(dataset_path)
     dataset_gen.clear_data()
-    dataset_gen.generate_samples(polygon_file, image_dir)
-    dataset_gen.split_dataset()
+    dataset_gen.generate_samples(polygon_path, image_path, num_samples=1000, shuffle=True)
