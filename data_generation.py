@@ -212,6 +212,9 @@ class DatasetGenerator:
             old_index = sample_index_shuffled[new_index]
             os.rename(os.path.join(self.image_path, f"i_{old_index}.png"), os.path.join(test_path, "images", f"i_{new_index}.png"))
             os.rename(os.path.join(self.mask_path, f"m_{old_index}.png"), os.path.join(test_path, "masks", f"m_{new_index}.png"))
+        
+        os.rmdir(self.image_path)
+        os.rmdir(self.mask_path)
 
     @staticmethod
     def import_image(image_file):
@@ -284,6 +287,7 @@ class ImageStream:
         mask_data *= self.rescale
         
         return image_data, mask_data
+
 
 class SegmentationDataGenerator(Sequence):
     def __init__(self, image_dir, mask_dir, target_size=(128,128), batch_size=32, shuffle=False, data_aug_args=None):
