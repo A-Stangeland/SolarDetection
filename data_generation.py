@@ -12,27 +12,25 @@ import utm
 
 
 class DatasetGenerator:
-    def __init__(self, dataset_dir, sample_size=128) -> None:
-        if not os.path.exists(dataset_dir):
-            os.makedirs(dataset_dir)
-        self.dataset_dir = dataset_dir
+    """Generator for datasets of image-mask pairs from a geojson file containing polygons of solar panels and corresponding satellite images."""
+    def __init__(self, dataset_path, sample_size=128) -> None:
+        if not os.path.exists(dataset_path):
+            os.makedirs(dataset_path)
+        self.dataset_path = dataset_path
         
         self.sample_counter = 0
         self.sample_size= sample_size
     
     def clear_data(self):
-        for dir1 in ["image", "label"]:
-            files = glob.glob(os.path.join(self.dataset_dir, dir1, "*"))
+        """Clears all files in the dataset directory."""
+        for directory in ["images", "masks"]:
+            files = glob.glob(os.path.join(self.dataset_path, directory, "*"))
             for f in files:
                 os.remove(f)
-        for dir1 in ["train", "test"]:
-            for dir2 in ["image", "label"]:
-                files = glob.glob(os.path.join(self.dataset_dir, dir1, dir2, "*"))
-                for f in files:
-                    os.remove(f)
         self.sample_counter = 0
     
     def read_polygon_file(self, polygon_file):
+        """Imports a geojson file containing the polygons of the solar panels as a dictionary."""
         with open(polygon_file, mode='r') as f:
             polygon_data = json.load(f)
         
@@ -40,6 +38,12 @@ class DatasetGenerator:
         return polygon_data["features"]
     
     def get_image_metadata(self, image_dir, file_format=".tif"):
+        """Returns a set of distinct image file names mentioned in the polygon file.
+        
+        The elements in the returned set are file path - file name pairs.
+        The path is used later used to import the images, while the file name is later 
+        used to iterate over the images mentionned in the polygon file one by one.
+        """
         image_metadata = []
         for panel in self.polygon_data:
             city_dir = os.path.join(image_dir, panel["properties"]["city"])
@@ -51,6 +55,7 @@ class DatasetGenerator:
         return set(image_metadata)
     
     def get_polygons_in_image(self, image_file):
+        """Returns a list of polygons and corresponding centroids contained in the given image."""
         polygons = []
         centroids = []
         for panel in self.polygon_data:
@@ -68,6 +73,7 @@ class DatasetGenerator:
         return polygons, centroids
     
     def get_mask(self, image, polygons):
+        """Returns a binary mask indicating solar panels in the image."""
         img_w = image.shape[1]
         img_h = image.shape[0]
         mask = Image.new('L', (img_w, img_h), 0)
@@ -78,6 +84,13 @@ class DatasetGenerator:
         return mask
 
     def get_sample_bounds(self, image, centroid, padding_ratio=.25):
+        """Retruns the bounds of a image sample.
+        
+        The image samples are sampled such that the solar panel centroids 
+        are uniformly ditributed within a square in the center of the image samples.
+        The padding_ratio controlls the size of the border of the image samples 
+        where centroids can not be contained.
+        """
         img_w = image.shape[1]
         img_h = image.shape[0]
         xcentr = round(centroid[0])
@@ -110,48 +123,37 @@ class DatasetGenerator:
 
         return sample_xmin, sample_xmax, sample_ymin, sample_ymax
 
-    def generate_samples(self, polygon_file, image_dir, super_sample=False):
+    def generate_samples(self, polygon_file, image_dir, shuffle=True):
         self.polygon_file = polygon_file
         self.image_dir = image_dir
-        
         polygon_data = self.read_polygon_file(polygon_file)
         
-        # Looping through image files first so the files can be opened and closed seperately
+        # Looping through image files first so that each image file will be opened and closed only once
         image_metadata = self.get_image_metadata(image_dir)
         for image_path, image_name in image_metadata:
-            print(image_path, image_name)
             image = self.import_image(image_path)
             polygons, centroids = self.get_polygons_in_image(image_name)
             mask = self.get_mask(image, polygons)
-            for i in range(len(polygons)):
-                sample_xmin, sample_xmax, sample_ymin, sample_ymax = self.get_sample_bounds(image, centroids[i])
+            for centroid in centroids:
+                sample_xmin, sample_xmax, sample_ymin, sample_ymax = self.get_sample_bounds(image, centroid)
                 image_sample = image[sample_ymin:sample_ymax, sample_xmin:sample_xmax]
                 mask_sample = mask[sample_ymin:sample_ymax, sample_xmin:sample_xmax]
-                print(self.dataset_dir + "image/" f"i_{self.sample_counter}.png")
-                Image.fromarray(image_sample).save(self.dataset_dir + "image/" f"i_{self.sample_counter}.png")
-                Image.fromarray(mask_sample).save(self.dataset_dir + "label/" f"m_{self.sample_counter}.png")
+                Image.fromarray(image_sample).save(os.path.join(self.dataset_path, "images", f"i_{self.sample_counter}.png"))
+                Image.fromarray(mask_sample).save(os.path.join(self.dataset_path, "masks", f"m_{self.sample_counter}.png"))
                 self.sample_counter += 1
+        if shuffle:
+            self.shuffle_dataset()
     
-    def split_dataset(self, test_split=.25):
+    def shuffle_dataset(self):
         sample_index_shuffled = np.random.permutation(self.sample_counter)
-        self.num_test_samples = int(test_split * self.sample_counter)
-        self.num_train_samples = self.sample_counter - self.num_test_samples
+        for old_index, new_index in enumerate(sample_index_shuffled):
+            old_image_path = os.path.join(self.dataset_path, "images", f"i_{old_index}.png")
+            new_image_path = os.path.join(self.dataset_path, "images", f"i_{new_index}.png")
+            os.rename(old_image_path, new_image_path)
 
-        for i in range(self.num_train_samples):
-            sample_index = sample_index_shuffled[i]
-            os.rename(self.dataset_dir + f"image/i_{sample_index}.png", self.dataset_dir + f"train/image/i_{i}.png")
-            os.rename(self.dataset_dir + f"label/m_{sample_index}.png", self.dataset_dir + f"train/label/m_{i}.png")
-
-        for i in range(self.num_train_samples, self.sample_counter):
-            sample_index = sample_index_shuffled[i]
-            os.rename(self.dataset_dir + f"image/i_{sample_index}.png", self.dataset_dir + f"test/image/i_{i}.png")
-            os.rename(self.dataset_dir + f"label/m_{sample_index}.png", self.dataset_dir + f"test/label/m_{i}.png")
-            
-    @staticmethod
-    def add_folder_slash(folder):
-        if folder[-1] not in ["/", "\\"]:
-            folder += "/"
-        return folder
+            old_mask_path = os.path.join(self.dataset_path, "masks", f"i_{old_index}.png")
+            new_mask_path = os.path.join(self.dataset_path, "masks", f"i_{new_index}.png")
+            os.rename(old_mask_path, new_mask_path)
     
     @staticmethod
     def import_image(image_file):
