@@ -1,5 +1,4 @@
-# from numpy.lib.type_check import imag
-from numpy.random.mtrand import shuffle
+from numpy.lib.type_check import imag
 import rasterio
 import json
 import numpy as np
@@ -16,7 +15,7 @@ import utm
 
 class DatasetGenerator:
     """Generator for datasets of image-mask pairs from a geojson file containing polygons of solar panels and corresponding satellite images."""
-    def __init__(self, dataset_path, sample_size=128) -> None:
+    def __init__(self, dataset_path, sample_size=128):
         if not os.path.exists(dataset_path):
             os.makedirs(dataset_path)
         image_path = os.path.join(dataset_path, "images")
@@ -25,7 +24,7 @@ class DatasetGenerator:
             os.makedirs(image_path)
         if not os.path.exists(mask_path):
             os.makedirs(mask_path)
-
+        
         self.dataset_path = dataset_path
         self.image_path = image_path
         self.mask_path = mask_path
@@ -38,10 +37,11 @@ class DatasetGenerator:
             files = glob.glob(os.path.join(self.dataset_path, directory, "*"))
             for f in files:
                 os.remove(f)
-        if os.path.exists(os.path.join(self.dataset_path, "images_old")):
-            shutil.rmtree(os.path.join(self.dataset_path, "images_old"))
-        if os.path.exists(os.path.join(self.dataset_path, "masks_old")):
-            shutil.rmtree(os.path.join(self.dataset_path, "masks_old"))
+        
+        delete_directories = ["images_old", "masks_old", "train", "test"]
+        for directory in delete_directories:
+            if os.path.exists(os.path.join(self.dataset_path, directory)):
+                shutil.rmtree(os.path.join(self.dataset_path, directory))
         self.sample_counter = 0
     
     def read_polygon_file(self, polygon_file):
@@ -138,7 +138,7 @@ class DatasetGenerator:
 
         return sample_xmin, sample_xmax, sample_ymin, sample_ymax
 
-    def generate_samples(self, polygon_file, image_dir, shuffle=True, num_samples=None, clear_data=True):
+    def generate_samples(self, polygon_file, image_dir, shuffle=True, num_samples=None, clear_data=True, test_split=None):
         if clear_data:
             self.clear_data()
 
@@ -165,10 +165,14 @@ class DatasetGenerator:
                     if self.sample_counter == num_samples:
                         if shuffle:
                             self.shuffle_dataset()
+                        if test_split is not None:
+                            self.split_dataset(test_split)
                         return None
         print("Dataset generation complete.")
         if shuffle:
             self.shuffle_dataset()
+        if test_split is not None:
+            self.split_dataset(test_split)
     
     def shuffle_dataset(self):
         print("Shuffling dataset...")
@@ -178,7 +182,7 @@ class DatasetGenerator:
         os.makedirs(self.mask_path)
 
         sample_index_shuffled = np.random.permutation(self.sample_counter)
-        for old_index, new_index in tqmd(enumerate(sample_index_shuffled)):
+        for old_index, new_index in tqdm(enumerate(sample_index_shuffled)):
             old_image_path = os.path.join(self.dataset_path, "images_old", f"i_{old_index}.png")
             new_image_path = os.path.join(self.image_path, f"i_{new_index}.png")
             os.rename(old_image_path, new_image_path)
@@ -189,11 +193,12 @@ class DatasetGenerator:
         
         os.rmdir(os.path.join(self.dataset_path, "images_old"))
         os.rmdir(os.path.join(self.dataset_path, "masks_old"))
-        print("Dataset shuffled.")
+        print("Dataset shuffling complete.")
     
-    def split_dataset(self, test_split=.25):
-        train_path = os.path.join(self.dataset_dir, "train")
-        test_path = os.path.join(self.dataset_dir, "test")
+    def split_dataset(self, test_split):
+        train_path = os.path.join(self.dataset_path, "train")
+        test_path = os.path.join(self.dataset_path, "test")
+        print(train_path)
         if not os.path.exists(train_path):
             os.makedirs(os.path.join(train_path, "images"))
             os.makedirs(os.path.join(train_path, "masks"))
@@ -221,7 +226,9 @@ class DatasetGenerator:
         with rasterio.open(image_file) as f:
             image = np.array(f.read())
             image = image.transpose((1,2,0))
-        return image
+            if image.shape[-1] > 3:
+                print(image_file, image.shape)
+        return image[:,:,:3]
 
     @staticmethod
     def poly_coords_to_int(polygon):
@@ -242,7 +249,6 @@ class DatasetGenerator:
             ymin = min(ymin, y)
             ymax = max(ymax, y)
         return xmin, xmax, ymin, ymax
-
 
 class ImageStream:
     def __init__(self, data_dir, batch_size=32, sample_size=128, rescale=1/255.) -> None:
@@ -290,41 +296,58 @@ class ImageStream:
 
 
 class SegmentationDataGenerator(Sequence):
-    def __init__(self, image_dir, mask_dir, target_size=(128,128), batch_size=32, shuffle=False, data_aug_args=None):
-        # super().__init__()
-        if data_aug_args is None:
-            data_aug_args = dict(rescale=1/255.)
-        self.data_aug_args = data_aug_args
-
-        self.image_datagen = ImageDataGenerator(**data_aug_args)
-        self.mask_datagen = ImageDataGenerator(**data_aug_args)
-
-        self.image_generator = self.image_datagen.flow_from_directory(
-            image_dir,
-            color_mode="rgb",
-            class_mode=None,
-            target_size=(128, 128),
-            batch_size=batch_size,
-            shuffle=shuffle,
-            classes=["image"])
-            
-        self.mask_generator = self.mask_datagen.flow_from_directory(
-            mask_dir,
-            color_mode="grayscale",
-            class_mode=None,
-            target_size=(128, 128),
-            batch_size=batch_size,
-            shuffle=shuffle,
-            classes=["label"])
+    def __init__(self, dataset_path, image_size=(128, 128), mask_size=None, batch_size=32, shuffle=True, rescale=1/255.):
+        self.image_size = image_size
+        if mask_size is None:
+            mask_size = image_size
+        self.mask_size = mask_size
+        self.batch_size = batch_size
+        self.dataset_path = dataset_path
+        self.rescale = rescale
+        self.image_path = os.path.join(dataset_path, "images")
+        self.mask_path = os.path.join(dataset_path, "masks")
+        self.image_names = [name for name in os.listdir(self.image_path)]
+        self.mask_names = [name for name in os.listdir(self.mask_path)]
+        self.n_files = len(self.image_names)
+        print(f"Found {self.n_files} files.")
+        self.shuffle = shuffle
+        if shuffle:
+            self.shuffle_samples()
 
 
-        self.__len__ = self.image_generator.__len__
-
-    # def __len__(self):
-        # self.image_generator.__len__()
+    def __len__(self):
+        return self.n_files // self.batch_size
 
     def __getitem__(self, index):
-        return self.image_generator.__getitem__(index), self.mask_generator.__getitem__(index)
+        X = np.zeros((self.batch_size, *self.image_size, 3), dtype="float32")
+        y = np.zeros((self.batch_size, *self.image_size, 1), dtype="float32")
+
+        batch_image_names = self.image_names[index*self.batch_size:(index+1)*self.batch_size]
+        batch_mask_names = self.mask_names[index*self.batch_size:(index+1)*self.batch_size]
+        for i, (image_name, mask_name) in enumerate(zip(batch_image_names, batch_mask_names)):
+            with Image.open(os.path.join(self.image_path, image_name)) as img:
+                X[i] = np.array(img, dtype="float32")[:,:,:3] * self.rescale 
+                
+            with Image.open(os.path.join(self.mask_path, mask_name)) as mask:
+                y[i,:,:,0] = np.array(mask, dtype="float32") * self.rescale 
+
+        return X, y
+    
+    def on_epoch_end(self):
+        if self.shuffle:
+            self.shuffle_samples()
+
+    def shuffle_samples(self):
+        image_mask_pairs = list(zip(self.image_names, self.mask_names))
+        np.random.shuffle(image_mask_pairs)
+        image_names, mask_names = zip(*image_mask_pairs)
+        self.image_names = image_names
+        self.mask_names = mask_names
+    
+    @staticmethod
+    def get_sample_index(name):
+        return name.split("_")[1].split(".")[0]
+    
 
 
 if __name__=='__main__':
@@ -334,4 +357,4 @@ if __name__=='__main__':
 
     dataset_gen = DatasetGenerator(dataset_path)
     dataset_gen.clear_data()
-    dataset_gen.generate_samples(polygon_path, image_path, shuffle=True)
+    dataset_gen.generate_samples(polygon_path, image_path, shuffle=True, test_split=.25)
