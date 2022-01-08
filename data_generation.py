@@ -31,7 +31,7 @@ class DatasetGenerator:
             If set to 0, solar panel centroid can be contained anywhere in the image samples.
             If set to 1, solar panel centroid will be in the center of the image samples.
     """
-    def __init__(self, dataset_path, sample_size=128, border_ratio=.25, shuffle=True, max_num_samples=None, clear_data=True, test_split=None):
+    def __init__(self, dataset_path, sample_size=128, border_ratio=.25, shuffle=True, max_num_samples=None, clear_data=True, test_split=0.2):
         self.set_dataset_path(dataset_path)
         self.sample_counter = 0
         self.sample_size= sample_size
@@ -328,7 +328,6 @@ class DatasetGeneratorGERS:
                 shutil.rmtree(os.path.join(self.dataset_path, directory))
         self.sample_counter = 0
     
-
     def read_polygon_file(self, polygon_file):
         """Imports a geojson file containing the polygons of the solar panels as a dictionary."""
         with open(polygon_file, mode='r') as f:
@@ -665,7 +664,6 @@ class SegmentationDataGenerator(tf.keras.utils.Sequence):
         return name.split("_")[1].split(".")[0]
     
 
-
 def transpose_masks(mask_path):
     files = glob.glob(os.path.join(mask_path, "*"))
     for f in files:
@@ -673,15 +671,17 @@ def transpose_masks(mask_path):
         img.transpose(Image.TRANSPOSE).save(f)
 
 if __name__=='__main__':
-    # polygon_path = r"..\Projet_INSA_France\DeepSolar\DATA_DeepSolar\metadata\SolarArrayPolygons.geojson"
-    # image_path = r"..\Projet_INSA_France\DeepSolar\DATA_DeepSolar"
-    # dataset_path = r"test_dataset2"
-    
-    polygon_path = r"..\DB_Gers_MAJ_20211125\DB_PV_Gers_Centroide_Vertex_2154_S_INSA.geojson"
-    image_path = r"..\Projet_INSA_France\IGN\OHR_RVB_0M20_JP2-E080_LAMB93_D32-2019"
-    dataset_path = r"gers_dataset2"
-
-    dataset_gen = DatasetGeneratorGERS(dataset_path, shuffle=False, test_split=None)
-    dataset_gen.generate_samples(polygon_path, image_path)
+    polygon_path = r"..\Projet_INSA_France\DeepSolar\DATA_DeepSolar\metadata\SolarArrayPolygons.geojson"
+    image_path = r"..\Projet_INSA_France\DeepSolar\DATA_DeepSolar"
+    dataset_path = r"usa_dataset_512"
+    dataset_gen = DatasetGenerator(dataset_path, sample_size=512)
+    # dataset_gen.generate_samples(polygon_path, image_path)
+    dataset_gen.sample_counter = 19861
+    dataset_gen.split_dataset(test_split=.2)
+    # polygon_path = r"..\DB_Gers_MAJ_20211125\DB_PV_Gers_Centroide_Vertex_2154_S_INSA.geojson"
+    # image_path = r"..\Projet_INSA_France\IGN\OHR_RVB_0M20_JP2-E080_LAMB93_D32-2019"
+    # dataset_path = r"gers_dataset"
+    # dataset_gen = DatasetGeneratorGERS(dataset_path, shuffle=False, test_split=None)
+    # dataset_gen.generate_samples(polygon_path, image_path)
 
     # transpose_masks("gers_dataset2/masks")
