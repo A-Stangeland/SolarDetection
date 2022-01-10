@@ -19,3 +19,39 @@ pip install -r requirements.txt
 The two main modules are `data_generation.py` handling the generation and processing of the data, and `train_model.py` for the training of the model.
 
 ## Data Processing
+
+## Polygon json schema
+```json
+{
+	"type": "FeatureCollection",
+	"features": [
+		{
+			"geometry": {
+				"coordinates": [
+                    [-119.83998,36.92599116],
+                    ...
+                ]
+			},
+			"properties": {
+				"polygon_id": 1,
+				"image_name": "11ska460890",
+				"datum": "NAD83",
+				"projection_zone": "11",
+				"resolution": 0.3,
+				"city": "Fresno",
+				"nw_corner_of_image_latitude": 36.92633611,
+				"nw_corner_of_image_longitude": -119.8516222,
+				"se_corner_of_image_latitude": 36.91323333,
+				"se_corner_of_image_longitude": -119.8343,
+				"centroid_latitude_pixels": 107.6184581,
+				"centroid_longitude_pixels": 3286.151487,
+				"polygon_vertices_pixels": [
+					[3360.495069,131.6311637],
+					...
+				]
+			}
+		},
+        ...
+    ]
+}
+```
