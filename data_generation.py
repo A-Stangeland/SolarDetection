@@ -170,6 +170,7 @@ class DatasetGenerator:
         self.read_polygon_file(polygon_file)
         num_panels = len(self.polygon_data)
         num_samples = min(num_panels, self.max_num_samples) if self.max_num_samples is not None else num_panels
+        
         # Looping through image files first so that each image file will be opened and closed only once
         image_metadata = self.get_image_metadata(image_dir)
         with tqdm(total=num_samples) as progress_bar:
@@ -588,7 +589,7 @@ class SegmentationDataGenerator(tf.keras.utils.Sequence):
     """
     def __init__(self, 
                  dataset_path, 
-                 image_size=(128, 128), 
+                 resize=None, 
                  mask_size=None, 
                  batch_size=32, 
                  shuffle=True, 
@@ -605,11 +606,17 @@ class SegmentationDataGenerator(tf.keras.utils.Sequence):
         self.shuffle = shuffle
         if shuffle:
             self.shuffle_samples()
-        if isinstance(image_size, int):
-            image_size = (image_size, image_size)
-        self.image_size = image_size
+        if resize is None:
+            with Image.open(os.path.join(self.image_path, self.image_names[0])) as img:
+                width, height = img.size
+            self.image_size = (height, width)
+        else:
+            if isinstance(resize, int):
+                resize = (resize, resize)
+            #TODO: Implement image resizing
+            self.image_size = resize
         if mask_size is None:
-            mask_size = image_size
+            mask_size = self.image_size
         self.mask_size = mask_size
         self.batch_size = batch_size
         self.rescale = rescale
@@ -638,6 +645,9 @@ class SegmentationDataGenerator(tf.keras.utils.Sequence):
                 y[i,:,:,0] = np.array(mask, dtype="float32")[::vi,::hi] * self.rescale 
         self.last_used_index = index
         return X, y
+    
+    def get_image_size(self):
+        return self.image_size
     
     def on_epoch_end(self):
         """When an epoch ends the samples are shuffled."""
