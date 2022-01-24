@@ -1,14 +1,16 @@
-from numpy.lib.type_check import imag
-import rasterio
 import json
 import numpy as np
+import pandas as pd
+import rasterio
 from rasterio.windows import Window
-import tensorflow as tf
+# import tensorflow as tf
+from tensorflow.keras.utils import Sequence
 from PIL import Image, ImageDraw
 from tqdm import tqdm
 import os
 import shutil
 import glob
+from argparse import ArgumentParser
 # import utm
 
 
@@ -40,6 +42,7 @@ class DatasetGenerator:
         self.clear_data = clear_data
         self.test_split = test_split
         self.max_num_samples = max_num_samples
+        self.sample_coord_df = pd.DataFrame()
     
     def set_dataset_path(self, dataset_path):
         if not os.path.exists(dataset_path):
@@ -81,15 +84,24 @@ class DatasetGenerator:
         The path is used later used to import the images, while the file name is later 
         used to iterate over the images mentionned in the polygon file one by one.
         """
-        image_metadata = []
+        distinct_images = []
+        image_metadata_list = []
         for panel in self.polygon_data:
-            city_dir = os.path.join(image_dir, panel["properties"]["city"])
             file_name = panel["properties"]["image_name"]
-            metadata = os.path.join(city_dir, file_name + file_format), file_name
-            image_metadata.append(metadata)
+            if file_name in distinct_images:
+                continue
+
+            image_data = dict()
+            image_data["name"] = file_name
+            image_data["path"] = os.path.join(image_dir, panel["properties"]["city"], f"{file_name}{file_format}")
+            image_data["nw_lat"] = panel["properties"]["nw_corner_of_image_latitude"]
+            image_data["nw_lon"] = panel["properties"]["nw_corner_of_image_longitude"]
+            image_data["se_lat"] = panel["properties"]["se_corner_of_image_latitude"]
+            image_data["se_lon"] = panel["properties"]["se_corner_of_image_longitude"]
+            image_metadata_list.append(image_data)
         
-        # self.image_file_names = set(image_files)
-        return set(image_metadata)
+        self.image_metadata_list = image_metadata_list
+        return image_metadata_list
     
     def get_polygons_in_image(self, image_file):
         """Returns a list of polygons and corresponding centroids contained in the given image."""
@@ -160,6 +172,24 @@ class DatasetGenerator:
 
         return sample_xmin, sample_xmax, sample_ymin, sample_ymax
 
+    def get_sample_coordinates(self, image_data, sample_xmin, sample_xmax, sample_ymin, sample_ymax):
+        """Returns the coordinates of the north-west and south-east corners of the image sample."""
+        im_h  = image_data["height"]
+        im_w  = image_data["width"]
+
+        nw_lat_ratio = sample_ymin / im_h
+        sample_nw_lat = nw_lat_ratio * image_data["se_lat"] + (1-nw_lat_ratio) * image_data["nw_lat"]
+        
+        nw_lon_ratio = sample_xmin / im_w
+        sample_nw_lon = nw_lon_ratio * image_data["se_lon"] + (1-nw_lon_ratio) * image_data["nw_lon"]
+
+        se_lat_ratio = sample_ymax / im_h
+        sample_se_lat = se_lat_ratio * image_data["se_lat"] + (1-se_lat_ratio) * image_data["nw_lat"]
+        
+        se_lon_ratio = sample_xmax / im_w
+        sample_se_lon = se_lon_ratio * image_data["se_lon"] + (1-se_lon_ratio) * image_data["nw_lon"]
+        return sample_nw_lat, sample_nw_lon, sample_se_lat, sample_se_lon
+
     def generate_samples(self, polygon_file, image_dir):
         if self.clear_data:
             self._clear_data()
@@ -172,18 +202,32 @@ class DatasetGenerator:
         num_samples = min(num_panels, self.max_num_samples) if self.max_num_samples is not None else num_panels
         
         # Looping through image files first so that each image file will be opened and closed only once
-        image_metadata = self.get_image_metadata(image_dir)
+        image_metadata_list = self.get_image_metadata(image_dir)
         with tqdm(total=num_samples) as progress_bar:
-            for image_path, image_name in image_metadata:
-                image = self.import_image(image_path)
-                polygons, centroids = self.get_polygons_in_image(image_name)
+            for image_data in image_metadata_list:
+                image = self.import_image(image_data["path"])
+                image_data["height"] = image.shape[0]
+                image_data["width"] = image.shape[1]
+                polygons, centroids = self.get_polygons_in_image(image_data["name"])
                 mask = self.get_mask(image, polygons)
                 for centroid in centroids:
-                    sample_xmin, sample_xmax, sample_ymin, sample_ymax = self.get_sample_bounds(image, centroid)
+                    sample_bbox = self.get_sample_bounds(image, centroid)
+                    sample_xmin, sample_xmax, sample_ymin, sample_ymax = sample_bbox
+
+                    # Slicing the image sample and mask and saving them
                     image_sample = image[sample_ymin:sample_ymax, sample_xmin:sample_xmax]
                     mask_sample = mask[sample_ymin:sample_ymax, sample_xmin:sample_xmax]
                     Image.fromarray(image_sample).save(os.path.join(self.dataset_path, "images", f"i_{self.sample_counter}.png"))
                     Image.fromarray(mask_sample).save(os.path.join(self.dataset_path, "masks", f"m_{self.sample_counter}.png"))
+
+                    # Storing the coordinates of the image samples
+                    sample_nw_lat, sample_nw_lon, sample_se_lat, sample_se_lon = self.get_sample_coordinates(image_data, *sample_bbox)
+                    new_df_line = pd.DataFrame(
+                        [[self.sample_counter, sample_nw_lat, sample_nw_lon, sample_se_lat, sample_se_lon]],
+                        columns=["id", "nw_lat", "nw_lon", "se_lat", "se_lon"]
+                    )
+                    self.sample_coord_df = pd.concat([self.sample_coord_df, new_df_line], ignore_index=True)
+
                     self.sample_counter += 1
                     progress_bar.update(1)
                     if self.sample_counter == num_samples:
@@ -195,6 +239,8 @@ class DatasetGenerator:
             self.shuffle_dataset()
         if self.test_split is not None:
             self.split_dataset(self.test_split)
+        
+        self.sample_coord_df.to_csv(os.path.join(self.dataset_path, "sample_coords.csv"), index=False)
     
     def shuffle_dataset(self):
         print("Shuffling dataset...")
@@ -215,6 +261,7 @@ class DatasetGenerator:
         
         os.rmdir(os.path.join(self.dataset_path, "images_old"))
         os.rmdir(os.path.join(self.dataset_path, "masks_old"))
+        self.sample_coord_df["id"] = sample_index_shuffled
         print("Dataset shuffling complete.")
     
     def split_dataset(self, test_split):
@@ -567,8 +614,8 @@ class DatasetGeneratorGERS:
         return xmin, xmax, ymin, ymax
 
 
-class SegmentationDataGenerator(tf.keras.utils.Sequence):
-    """Generate batches of image-mask pairs.
+class SegmentationDataGenerator(Sequence):
+    """Used during training of keras models to generate batches of image-mask pairs.
     
     Args:
         dataset_path (str): Path to the dataset.
@@ -675,23 +722,43 @@ class SegmentationDataGenerator(tf.keras.utils.Sequence):
     
 
 def transpose_masks(mask_path):
+    """Helper function used to transpose mask if the latitude/longitude coordinates were incorrectly swaped."""
     files = glob.glob(os.path.join(mask_path, "*"))
     for f in files:
         img = Image.open(f)
         img.transpose(Image.TRANSPOSE).save(f)
 
-if __name__=='__main__':
-    polygon_path = r"..\Projet_INSA_France\DeepSolar\DATA_DeepSolar\metadata\SolarArrayPolygons.geojson"
-    image_path = r"..\Projet_INSA_France\DeepSolar\DATA_DeepSolar"
-    dataset_path = r"usa_dataset_512"
-    dataset_gen = DatasetGenerator(dataset_path, sample_size=512)
-    # dataset_gen.generate_samples(polygon_path, image_path)
-    dataset_gen.sample_counter = 19861
-    dataset_gen.split_dataset(test_split=.2)
-    # polygon_path = r"..\DB_Gers_MAJ_20211125\DB_PV_Gers_Centroide_Vertex_2154_S_INSA.geojson"
-    # image_path = r"..\Projet_INSA_France\IGN\OHR_RVB_0M20_JP2-E080_LAMB93_D32-2019"
-    # dataset_path = r"gers_dataset"
-    # dataset_gen = DatasetGeneratorGERS(dataset_path, shuffle=False, test_split=None)
-    # dataset_gen.generate_samples(polygon_path, image_path)
+def main():
+    parser = ArgumentParser()
+    parser.add_argument("--image_path", type=str, default = "./data/images", help="Path to satellite images")
+    parser.add_argument("--json_path",  type=str, default = "./data/", help="Path to json file containing solar panel polygons")
+    parser.add_argument("--dataset_path", type=str, default = "./data/dataset", help="Location where the dataset will be created")
+    parser.add_argument("--image_size", type=int, default = 128, help="Size of the generated image samples")
+    parser.add_argument("--shuffle", type=bool, default = True, help="Shuffle after generating samples")
+    parser.add_argument("--test_split", type=float, default = 0.25, help="Ratio of samples in the test set")
 
-    # transpose_masks("gers_dataset2/masks")
+    args = parser.parse_args()
+
+    # Raise error if path to satellite images or json file does not exsist
+    # assert(os.path.exists(args.image_path) and os.path.exists(args.json_path))
+
+    if not os.path.exists(args.dataset_path):
+        os.makedirs(args.dataset_path)
+
+    dataset_generator = DatasetGenerator(
+        args.dataset_path, 
+        sample_size=args.image_size, 
+        shuffle=args.shuffle,
+        test_split=args.test_split,
+        max_num_samples=100
+    )
+
+    # dataset_generator.generate_samples(args.json_path, args.image_path)
+    json_path = r"C:\Users\aleks\Documents\5GMM\Projet\Projet_INSA_France\DeepSolar\DATA_DeepSolar\metadata\SolarArrayPolygons.geojson"
+    image_path = r"C:\Users\aleks\Documents\5GMM\Projet\Projet_INSA_France\DeepSolar\DATA_DeepSolar"
+    dataset_generator.generate_samples(json_path, image_path)
+    print(f"The dataset was successfully generated at {args.dataset_path}")
+
+
+if __name__=='__main__':
+    main()
