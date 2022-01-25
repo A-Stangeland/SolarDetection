@@ -38,21 +38,12 @@ To generate a dataset of image samples and their corresponding binary mask ('0' 
 * ```shuffle```: Shuffle after generating samples (Bool)
 * ```test_split```: Ratio of samples in the test set (Float)
 
-Execute the below command to generate the dataset: 
-```
-python data_generation.py --dataset_path dataset_path --json_path json_path --image_size image_size --shuffle shuffle --test_split test_split
-```
-
-Using the default values chosen by us the above command becomes: 
-```
-python data_generation.py --dataset_path "./data/images" --json_path "./data" --image_size 128 --shuffle True --test_split 0.25
-```
+These parameters can be modified in the `datagen_config.json` file.
 
 ### Data Augmentation
 Data augmentation is used in the project to get the most out of the accessible dataset. The methods used are vertical and horizontal flips of image samples and its corresponding binary mask. 
 The image sample has a 50% likelihood of being flipped along each axis, essentially making it possible to generate four total training samples from each training sample in the original dataset. The ground truth label is flipped along with the sample. 
 
-## Data Processing
 
 ## Polygon JSON schema
 The dataset generation is adapted for a dataset of satellite imagery with a corresponding JSON file containing the solar panel polygons, and this JSON file has a pre-defined structure that should be followed to generate new samples and ground truth labels without needing to modify the ```data_generation.py``` script.  
