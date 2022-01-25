@@ -44,6 +44,9 @@ These arguments can be modified in the `datagen_config.json` file.
 Data augmentation is used in the project to get the most out of the accessible dataset. The methods used are vertical and horizontal flips of image samples and its corresponding binary mask. 
 The image sample has a 50% likelihood of being flipped along each axis, essentially making it possible to generate four total training samples from each training sample in the original dataset. The ground truth label is flipped along with the sample. 
 
+### Training
+A new model can be trained simply by running the `train_unet.py` script.
+The trained model will be saved in a directory called `trained_models`.
 
 ## Polygon JSON schema
 The dataset generation is adapted for a dataset of satellite imagery with a corresponding JSON file containing the solar panel polygons, and this JSON file has a pre-defined structure that should be followed to generate new samples and ground truth labels without needing to modify the ```data_generation.py``` script.  
