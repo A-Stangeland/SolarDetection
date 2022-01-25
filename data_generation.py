@@ -10,7 +10,6 @@ from tqdm import tqdm
 import os
 import shutil
 import glob
-from argparse import ArgumentParser
 # import utm
 
 
@@ -605,37 +604,25 @@ def transpose_masks(mask_path):
         img.transpose(Image.TRANSPOSE).save(f)
 
 def main():
-    parser = ArgumentParser()
-    parser.add_argument("--image_path", type=str, default = "./data/images", help="Path to satellite images")
-    parser.add_argument("--json_path",  type=str, default = "./data/", help="Path to json file containing solar panel polygons")
-    parser.add_argument("--dataset_path", type=str, default = "./data/dataset", help="Location where the dataset will be created")
-    parser.add_argument("--gers", type=bool, default = False, help="Set to true of generating from Gers data")
-    parser.add_argument("--image_size", type=int, default = 128, help="Size of the generated image samples")
-    parser.add_argument("--shuffle", type=bool, default = True, help="Shuffle after generating samples")
-    parser.add_argument("--test_split", type=float, default = 0.25, help="Ratio of samples in the test set")
-
-    args = parser.parse_args()
+    with open("datagen_config.json", mode="r") as f:
+        args = json.load(f)
 
     # Raise error if path to satellite images or json file does not exsist
-    assert(os.path.exists(args.image_path) and os.path.exists(args.json_path))
+    assert(os.path.exists(args["image_path"]) and os.path.exists(args["json_path"]))
 
-    if not os.path.exists(args.dataset_path):
-        os.makedirs(args.dataset_path)
+    if not os.path.exists(args["dataset_path"]):
+        os.makedirs(args["dataset_path"])
 
-    Generator = DatasetGeneratorGERS if args.gers else DatasetGenerator
+    Generator = DatasetGeneratorGERS if args["gers"] else DatasetGenerator
     dataset_generator = Generator(
-        args.dataset_path, 
-        sample_size=args.image_size, 
-        shuffle=args.shuffle,
-        test_split=args.test_split,
-        max_num_samples=100
+        args["dataset_path"], 
+        sample_size=args["image_size"], 
+        shuffle=args["shuffle"],
+        test_split=args["test_split"]
     )
 
-    # dataset_generator.generate_samples(args.json_path, args.image_path)
-    json_path = r"C:\Users\aleks\Documents\5GMM\Projet\Projet_INSA_France\DeepSolar\DATA_DeepSolar\metadata\SolarArrayPolygons.geojson"
-    image_path = r"C:\Users\aleks\Documents\5GMM\Projet\Projet_INSA_France\DeepSolar\DATA_DeepSolar"
-    dataset_generator.generate_samples(json_path, image_path)
-    print(f"The dataset was successfully generated at {args.dataset_path}")
+    dataset_generator.generate_samples(args["json_path"], args["image_path"])
+    print(f"The dataset was successfully generated at {args['dataset_path']}")
 
 
 if __name__=='__main__':

@@ -1,0 +1,9 @@
+{
+    "image_path": "",
+    "json_path": "",
+    "dataset_path": "",
+    "gers": false,
+    "image_size": 128,
+    "shuffle": true,
+    "test_split": 0.25
+}
