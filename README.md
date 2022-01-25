@@ -38,7 +38,7 @@ To generate a dataset of image samples and their corresponding binary mask ('0' 
 * ```shuffle```: Shuffle after generating samples (Bool)
 * ```test_split```: Ratio of samples in the test set (Float)
 
-These parameters can be modified in the `datagen_config.json` file.
+These arguments can be modified in the `datagen_config.json` file.
 
 ### Data Augmentation
 Data augmentation is used in the project to get the most out of the accessible dataset. The methods used are vertical and horizontal flips of image samples and its corresponding binary mask. 
