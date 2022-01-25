@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import os
 from os.path import join as join_path
 
 import tensorflow as tf
@@ -55,7 +56,7 @@ def create_unet(image_size=(128,128)):
     unet = Model(in_unet, out_unet)
     return unet
 
-def train_unet(dataset_path="test_dataset", batch_size=32, epochs=10, unet_save_name="unet.tf"):
+def train_unet(dataset_path="dataset", batch_size=32, epochs=10, unet_save_name="unet.tf"):
     train_gen = SegmentationDataGenerator(join_path(dataset_path, "train"), batch_size=batch_size)
     test_gen = SegmentationDataGenerator(join_path(dataset_path, "test"), batch_size=batch_size)
     image_size = train_gen.get_image_size()
@@ -67,7 +68,16 @@ def train_unet(dataset_path="test_dataset", batch_size=32, epochs=10, unet_save_
         metrics=["accuracy","precision", "recall"])
     
     training_history = unet.fit(train_gen, validation_data=test_gen, epochs=epochs)
-    unet.save(join_path("trained_models", unet_save_name))
     return unet, training_history
 
+def main():
+    dataset_path = "dataset"
+    model_name = "unet"
+    model, history = train_unet(dataset_path, unet_save_name=f"{model_name}.tf")
+    
+    if not os.path.exists("trained_models"):
+            os.makedirs("trained_models")
+    model.save(os.path.join("trained_models", f"{model_name}.tf"))
 
+if __name__ == "__main__":
+    main()

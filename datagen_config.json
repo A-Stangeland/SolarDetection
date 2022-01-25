@@ -1,7 +1,7 @@
 {
-    "image_path": "",
-    "json_path": "",
-    "dataset_path": "",
+    "image_path": "data/images",
+    "json_path": "data/polygon.geojson",
+    "dataset_path": "dataset",
     "gers": false,
     "image_size": 128,
     "shuffle": true,
