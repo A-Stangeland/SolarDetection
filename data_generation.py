@@ -265,6 +265,7 @@ class DatasetGenerator:
         print("Dataset shuffling complete.")
     
     def split_dataset(self, test_split):
+        """Splits the saved image samples in two sub-directories: train and test"""
         train_path = os.path.join(self.dataset_path, "train")
         test_path = os.path.join(self.dataset_path, "test")
         print(train_path)
