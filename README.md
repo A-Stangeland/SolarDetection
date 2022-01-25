@@ -33,7 +33,7 @@ To generate a dataset of image samples and their corresponding binary mask ('0' 
 * ```image_path```: Path to the satellite images (str)
 * ```json_path```: Path to JSON file containing the panel polygons (str)
 * ```dataset_path```: Path to where the dataset will be created (str)
-* ```gers```: Shuffle after generating samples (Bool)
+* ```gers```: Set to `true` if generating from Gers data (Bool)
 * ```image_size```: Generated image sample size, samples will be ```image_size``` by ```image_size``` pixels in size (int)
 * ```shuffle```: Shuffle after generating samples (Bool)
 * ```test_split```: Ratio of samples in the test set (Float)
