@@ -23,9 +23,9 @@ The two main modules are `data_generation.py` handling the generation and proces
 
 ## Usage
 ### Generating the dataset 
-The data generator class to use depends on the data source, as US and French satellita data have different sizes, and thus require different approaches. 
+The data generator class to use depends on the data source, as US and French satellite data have different sizes, and thus require different approaches. 
 The US dataset is composed of images that are 5000 by 5000 pixels in sixe and usage of the ```DatasetGenerator``` class is created with images of this size in mind.
-The French satellite images we had access to were 25 000 by 25000 pixels, and thus require more memory to load each image. 
+The French satellite images we had access to were 25 000 by 25000 pixels, and too large to load the whole image in memory. 
 For this reason, a second data generation class, ```DatasetGeneratorGERS```, was created by adapting the data generator class for the US images. 
 
 To generate a dataset of image samples and their corresponding binary mask ('0' if there is no panel, '1' if there is) the following arguments can be specified: 
@@ -33,6 +33,7 @@ To generate a dataset of image samples and their corresponding binary mask ('0' 
 * ```image_path```: Path to the satellite images (str)
 * ```json_path```: Path to JSON file containing the panel polygons (str)
 * ```dataset_path```: Path to where the dataset will be created (str)
+* ```gers```: Shuffle after generating samples (Bool)
 * ```image_size```: Generated image sample size, samples will be ```image_size``` by ```image_size``` pixels in size (int)
 * ```shuffle```: Shuffle after generating samples (Bool)
 * ```test_split```: Ratio of samples in the test set (Float)
