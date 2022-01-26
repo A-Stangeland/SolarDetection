@@ -1,12 +1,15 @@
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 import os
-from os.path import join as join_path
+import json
+import shutil
+from argparse import ArgumentParser
 
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras.layers import Conv2D, MaxPool2D, UpSampling2D, Concatenate, Input
-from tensorflow.keras.models import Model
+from tensorflow.keras.models import Model, load_model
 import tensorflow.keras.metrics as km
 import tensorflow.keras.backend as K
 
@@ -56,28 +59,75 @@ def create_unet(image_size=(128,128)):
     unet = Model(in_unet, out_unet)
     return unet
 
-def train_unet(dataset_path="dataset", batch_size=32, epochs=10, unet_save_name="unet.tf"):
-    train_gen = SegmentationDataGenerator(join_path(dataset_path, "train"), batch_size=batch_size)
-    test_gen = SegmentationDataGenerator(join_path(dataset_path, "test"), batch_size=batch_size)
+def train_unet(
+        dataset_path="dataset", 
+        batch_size=32, 
+        epochs=10, 
+        loss="binary_crossentropy", 
+        optimizer="adam"):
+    
+    train_gen = SegmentationDataGenerator(os.path.join(dataset_path, "train"), batch_size=batch_size)
+    test_gen = SegmentationDataGenerator(os.path.join(dataset_path, "test"), batch_size=batch_size)
     image_size = train_gen.get_image_size()
     
     unet = create_unet(image_size)
     unet.compile(
-        loss="binary_crossentropy", 
-        optimizer="rmsprop",
+        loss = loss, 
+        optimizer = optimizer,
         metrics=["accuracy","precision", "recall"])
     
     training_history = unet.fit(train_gen, validation_data=test_gen, epochs=epochs)
-    return unet, training_history
+    training_history_df = pd.DataFrame(**training_history.history)
+    unet.evaluate(test_gen)
+    return unet, training_history_df
+
+def evaluate_model():
+    pass
+
+def validate_model_path(model_name, model_save_path):
+    """Checks if the model already exists and is so, asks the user if they want to overwrite."""
+    name_validated = False
+    while not name_validated:
+        model_path = os.path.join(model_save_path, model_name)
+        model_exists = os.path.exists(model_path)
+        if model_exists:
+            overwrite = input(f"There is already a model named {model_name}. Do you wish to overwrite?([y]/n)")
+            if overwrite.lower() in ["yes", "y", ""]:
+                shutil.rmtree(model_path)
+                os.makedirs(model_path)
+                name_validated = True
+            elif overwrite.lower() in ["no", "n"]:
+                model_name = input("Please provide a new model name:")
+            else:
+                raise ValueError("Invaid input. Aborting.")
+        else:
+            os.makedirs(model_path)
+            name_validated = True
+    return model_name, model_path
+
 
 def main():
-    dataset_path = "dataset"
-    model_name = "unet"
-    model, history = train_unet(dataset_path, unet_save_name=f"{model_name}.tf")
-    
-    if not os.path.exists("trained_models"):
-            os.makedirs("trained_models")
-    model.save(os.path.join("trained_models", f"{model_name}.tf"))
+    parser = ArgumentParser()
+    parser.add_argument("--model_name", type=str, default = "unet", help="Name of the model")
+    parser.add_argument("--mode", type=str, default = "train", help="Train/eval mode")
+    args = parser.parse_args()
+    model_name = args.model_name
+    with open("train_config.json", mode="r") as f:
+        config = json.load(f)
+    model_save_path = config.pop("model_save_path")
+    if args.mode.lower() in ["t", "train"]:
+        model_name, model_path = validate_model_path(model_name, model_save_path)
+        model, training_history = train_unet(**config)
+        model.save(os.path.join(model_path, f"{model_name}.tf"))
+        training_history.to_csv(os.path.join(model_path, f"{model_name}_history.csv"), index=False)
+    elif args.mode.lower() in ["e", "eval", "evaluate"]:
+        model_path = os.path.join(model_save_path, model_name)
+        if not os.path.exists(model_path):
+            raise ValueError(f"The model {model_name} does not exist at the location: {model_save_path}")
+        
+        model = load_model(os.path.join(model_path, f"{model_name}.tf"))
+        evaluate_model(model)
+        
 
 if __name__ == "__main__":
     main()
