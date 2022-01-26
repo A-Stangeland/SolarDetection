@@ -1,5 +1,6 @@
 {
     "dataset_path": "dataset",
+    "eval_dataset_path": "eval_dataset",
     "model_save_path": "trained_models",
     "batch_size": 32,
     "epochs": 10,
