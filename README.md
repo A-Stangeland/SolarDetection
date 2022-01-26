@@ -41,13 +41,27 @@ To generate a dataset of image samples and their corresponding binary mask ('0' 
 
 These arguments can be modified in the `datagen_config.json` file.
 
+To generate a dataset from satellite images and a polygon file, run the `data_generation.py` script by executing the following line:
+
+```python data_generation.py```
+
+
 ### Data Augmentation
 Data augmentation is used in the project to get the most out of the accessible dataset. The methods used are vertical and horizontal flips of image samples and its corresponding binary mask. 
-The image sample has a 50% likelihood of being flipped along each axis, essentially making it possible to generate four total training samples from each training sample in the original dataset. The ground truth label is flipped along with the sample. 
+The image sample has a 50% chance of being flipped along each axis, essentially making it possible to generate four total training samples from each training sample in the original dataset. The ground truth label is flipped along with the sample. 
 
 ### Training
-A new model can be trained simply by running the `train_unet.py` script.
-The trained model will be saved in a directory called `trained_models`.
+A new model can be trained by running the `train_unet.py` script.
+When running the script, two arguments can be provided:
+* `model_name`: If in training mode: this will be the name of the saved model. If in evaluation mode, this is the name of the model to be evaluated.
+* `mode`: Can be either `t`/`train` or `e`/`eval`
+
+The following line shows an example of unsing the `train_unet.py` script:
+
+`python train_unet.py --model_name my_model --mode t`
+
+The parameters for the training of the model will be loaded from the `train_config.json` file.
+The trained model will be saved in a sub-directory (named after the model) of `trained_models`.
 
 ## Polygon JSON schema
 The dataset generation is adapted for a dataset of satellite imagery with a corresponding JSON file containing the solar panel polygons, and this JSON file has a pre-defined structure that should be followed to generate new samples and ground truth labels without needing to modify the ```data_generation.py``` script.  
