@@ -1,0 +1,8 @@
+{
+    "dataset_path": "dataset",
+    "model_save_path": "trained_models",
+    "batch_size": 32,
+    "epochs": 10,
+    "loss": "binary_crossentropy",
+    "optimizer": "adam"
+}
