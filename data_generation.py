@@ -216,7 +216,7 @@ class DatasetGenerator:
                 polygons, centroids = self.get_polygons_in_image(image_data["name"])
                 mask = self.get_mask(image, polygons)
                 for centroid in centroids:
-                    sample_bbox = self.get_sample_bounds(image, centroid)
+                    sample_bbox = self.get_sample_bounds(centroid, image)
                     sample_xmin, sample_xmax, sample_ymin, sample_ymax = sample_bbox
 
                     # Slicing the image sample and mask and saving them
