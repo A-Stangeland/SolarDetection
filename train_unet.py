@@ -23,7 +23,7 @@ def down_block(filters, conv_args, conv_in):
     
 def up_block(filters, conv_args, conv_in, skip):
     x = UpSampling2D()(conv_in)
-    x = Concatenate(axis=-1)([conv_in, skip])
+    x = Concatenate(axis=-1)([x, skip])
     x = Conv2D(filters, **conv_args)(x)
     up = Conv2D(filters, **conv_args)(x)
     return up
@@ -70,11 +70,19 @@ def train_unet(
     test_gen = SegmentationDataGenerator(os.path.join(dataset_path, "test"), batch_size=batch_size)
     image_size = train_gen.get_image_size()
     
+    # Defining the evaluation metrics
+    eval_metrics = [
+        km.BinaryAccuracy(name="accuracy"),
+        km.AUC(name="PR_AUC", curve="PR"),
+        km.Precision(name="precision"),
+        km.Recall(name="recall")
+    ]
+
     unet = create_unet(image_size)
     unet.compile(
         loss = loss, 
         optimizer = optimizer,
-        metrics=["accuracy","precision", "recall"])
+        metrics=eval_metrics)
     
     training_history = unet.fit(train_gen, validation_data=test_gen, epochs=epochs)
     training_history_df = pd.DataFrame(**training_history.history)
