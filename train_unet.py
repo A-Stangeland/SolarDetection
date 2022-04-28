@@ -85,7 +85,7 @@ def train_unet(
         metrics=eval_metrics)
     
     training_history = unet.fit(train_gen, validation_data=test_gen, epochs=epochs)
-    training_history_df = pd.DataFrame(**training_history.history)
+    training_history_df = pd.DataFrame(training_history.history)
     unet.evaluate(test_gen)
     return unet, training_history_df
 
